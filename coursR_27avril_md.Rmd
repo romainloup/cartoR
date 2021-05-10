@@ -1,0 +1,470 @@
+---
+title: "Cartographie, MQ4"
+author: "Romain Loup"
+date: "Jeudi 29 avril 2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+## Qu'est-ce qu'une carte ?
+
+« _Une **carte** est une image simplifiée et codifiée de l’espace géographique, qui représente ses caractéristiques et/ou son organisation. Elle résulte de l’acte créateur et des choix de son auteur._ »
+
+Extrait de: Lambert. « Manuel de cartographie. »
+
+### Il existe deux types de cartes :
+
+1. Les cartes **topographiques**. Essentiellement des observations directes : reliefs, cours d'eau, aménagements humains. Il s'agit d'éléments concrets, **fixes** et **durables** observés à un moment donné.
+2. Les cartes **thématiques**. Il s'agit ici de représenter des phénomènes localisables, **quantitatif** ou **qualitatifs** de toute nature. C'est essentiellement ce type de carte qui nous intéresse en statistiques.
+
+### Pourquoi des cartes ?
+
+Elles permettent de représenter **spatialement** l'information, de la visualiser et de l'analyser.
+
+
+## Construire une carte
+
+Il y a plusieurs moyens de construire une carte par ordinateur. Il faut donc d'abord définir l'**objectif** de la carte. Si celle-ci est **statique**, il suffit de la constuire dans un logiciel SIG (Système d'Information Géographique) comme [QGis](https://www.qgis.org/fr/site/). Sinon, il est possible de concevoir une carte **dynamique** en utilisant JavaScript (avec comme structure des balises html) et la librairie *open-source* [Leaflet](https://leafletjs.com).
+
+Pour des analyses statistiques, il est possible d'utiliser ces deux méthodes à travers **R** et de créer des premières cartes grâce à cette structure.
+
+### Fichier de format *shapefiles*
+
+Un *shapfile* est une extention de fichier qui stocke les données des informations géométriques nécessaires à créer une carte. Il existe trois entité géographique qui sont le **point**, la **ligne** ou le **polygône**. Ces entités doivent être stockées selon la **latitude** (axe X) et la **longitude** (axe Y) selon un système de **projection** (expliqué plus loin). L'**altitude** (axe Z) n'est pas obligatoire, cette information doit parfois être supprimée suivant le type de carte choisi. A cela peuvent être ajoutées des **métadonnées**, qui contiennent les informations sur les fichiers, comme par exemple le nombre d'habitants, la langue parlée ou encore la monnaie d'une région.
+
+A noter que ces fichiers viennet par 5, reconnaissables par les extensions ```.shp```, ```.shx```, ```.dbx```, ```.cpg``` et ```.prj```.
+
+### Télécharger des couches pour un fond de carte
+
+Ce type de données est souvent en libre accès. Il est possible d'obtenir toutes sortes de données comme par exemple les frontières cantonales ou communales de la Suisse. Disponible à ce lien, les [couches de différents niveaux géographique de la Suisse](https://shop.swisstopo.admin.ch/fr/products/landscape/boundaries3D) permettent de créer des cartes. Nous allons ici utiliser les couches des limites communales suisses ainsi que celles des principaux lacs.
+
+## Cartes statiques
+
+Initialement, les *shapefiles* doivent être exploités avec un logiciel de SIG, mais il est possible de les ouvrir dans R grâce au package ```sf```. ```sf``` permet de lire les données géospatiales dans R. Il existe d'autres packages dévolus à cette fonction comme ```rgdal```.
+
+
+Le processus est le suivant :
+
+Tout d'abord, télécharger le fichier des [communes et lacs suisses](https://drive.switch.ch/index.php/s/7P40hJwc5zHpcyY).
+Adapter également le répertoire de travail afin qu'il corresponde à celui de votre environnement R. (Il est possible d'utiliser le dossier ```dataCartoR``` comme univers de travail.)
+
+```{R}
+setwd("/Users/rloup/Desktop")
+# setwd("/Users/userName/dataCartoR") # adapter le répertoire de travail 
+library("sf")
+
+communesCH <- st_read("data/communesWGSCH.shp")
+st_crs(communesCH)
+```
+#### Système de projection
+
+Il est important voir quelle est le système de projection utilisé. La projection cartographique est un ensemble de techniques géodésiques permettant de représenter une surface non plane (surface de la Terre, d’un autre corps céleste, du ciel, …) dans son ensemble ou en partie sur la surface plane d’une carte ([Wikipédia](https://fr.wikipedia.org/wiki/Projection_cartographique)).
+
+Il s'agit en gros d'adapter aux mieux sur une surface *plane* qui est une carte, la surface de la terre qui est *ellipsoïdale*.
+
+Il existe plusieurs systèmes de projection suivant qui s'adaptent au mieux suivant la zone du globe terreste. Pour le package ```sf```, il est possible de vérifier quel est le système utilisé par les données utilisées. La commande ```st_crs(communesCH)``` (ci-dessus) permet de voir quel est le système de projection utilisé par les données ```communesCH```.
+
+#### Ajout d'une deuxième couche
+
+```{R}
+lacs <- st_read("lacs/lacs.shp")
+st_crs(lacs)
+```
+
+Il est à noter que le système de projection pour la couche des lacs est différent que celui des communes. Si deux couches n'ont pas le même système de projection, il n'est pas possible de combiner les différentes couches.
+
+Il est alors possible d'uniformiser le système de projection (```crs```) :
+
+```{R}
+lacs <- st_transform(lacs, crs = 4326)
+st_crs(lacs)
+```
+
+```4326```correspond au système de projection mondial [WGS84](https://epsg.io/4326). Il est possible de trouver des informations sur les différents systèmes de projections [ici](https://epsg.io).
+
+#### Communes
+
+Voilà à quoi ressemble le fichier shapefile dans R. ```head(communesCH,3)```permet de donner un aperçu des 3 premières lignes des données contenues dans le fichier ```communesCH```.
+
+La colonne ```geometry```contient les données de géométrie de chaque couche dans le package ```sf```, accessible ici par ```communesCH$geometry```.
+
+```{R}
+head(communesCH,3)
+```
+
+#### Premières cartes : communes suisses et lacs
+Ces cartes sont obtenues grâce aux shapefiles téléchargés précédemment. La fonction ```plot```est comprise dans le package de base de R.
+
+```{R}
+par(mar=c(0,0,0,0)) # margesinitialisées à 0
+plot(communesCH$geometry, col="grey", bg="#f2f2f2", lwd=0.25, border="#FFFFFF") # Communes de Suisse, couleur grise, avec un fond gris clair (#f2f2f2), marges à 0.
+plot(lacs$geometry, col="lightblue", bg="#f2f2f2", lwd=0.25, border=F, add=T)
+```
+
+```lwd``` : épaisseur des lignes de séparation
+
+```border``` : couleur de la bordure
+
+```add = T``` : permet d'ajouter une deuxième couche au graphique déjà créé
+
+### Cartographier un phénomène
+
+Il est possible maintenant de cartographier des phénomènes comme le résultat de votations fédérales par commune.
+
+Télécharger le fichier ```.csv``` avec les résultats des votations sur les entreprises responsables (disponible *via* le même lien [SwitchDrive](https://drive.switch.ch/index.php/s/7P40hJwc5zHpcyY)) que celui des communes.
+
+
+
+```{R}
+dfEntrResp <- read.csv2("entrResp.csv", header = TRUE) # Lire le fichier .csv
+head(dfEntrResp,3)
+```
+
+```header = TRUE``` : obligatoire lorsque le fichier comprend une entête
+
+#### Jointure de deux fichier
+
+Renommer l'identifiant pour faire une jointure entre le ```.shp``` et le ```.csv``` grâce au package ```dplyr```qui permet de manipuler les jeux de données. C'est un outil pour la manipulation de data frame pour par exemple renommer des colonnes.
+
+```{R}
+library("dplyr")
+communesCH <- rename(communesCH, NoCommune=BFS_NUMMER)
+names(communesCH)
+```
+
+Le nom de ```BFS_NUMMER```est bien devenu ```NoCommune```.
+
+Assembler (jointure) les deux fichiers en un nouveau fichier nommé ```communesVotation```. Toutes les données relatives à la votation seront disponibles dans le *shapefile* des communes. Il faut par contre qu'il y ait un élément de jointure commun.
+
+```{R}
+communesVotation <- merge(communesCH, dfEntrResp,by='NoCommune')
+names(communesVotation)
+```
+
+### Communes par canton
+```ColorBrewer``` est un package qui permet d'obtenir des palettes de couleurs qui évitent les mauvais choix et qui permet de choisir des couleurs qui sont identifiables pour les daltoniens par exemple. Diverses infos sur ce package [ici](https://www.datanovia.com/en/fr/blog/palette-de-couleurs-rcolorbrewer-de-a-a-z/)
+
+Toutes les palettes de couleurs dispobibles peuvent être affichées avec la commande ```display.brewer.all()```
+
+```{R}
+library("RColorBrewer")
+display.brewer.all()
+```
+
+```{R}
+library("RColorBrewer")
+# Palette de 26 couleurs
+my_colors <- brewer.pal(12, "Set3") # 12 couleurs (certaines palettes n'offrent pas plus de couleurs)
+my_colors <- colorRampPalette(my_colors)(26) # cette commande permet d'ajouter des couleurs, soit les 26 couleurs nécessaires pour 26 cantons suisses (en format hex)
+my_colors # 26 couleurs dans la même palette sont disponibles
+```
+
+Création d'une carte des communes suisses, par canton avec les principaux lacs
+
+```{R}
+# Attribue une couleur appropriée pour chaque canton en utilisant le numéro de canton
+class_of_canton <- cut(as.numeric(communesCH$KANTONSNUM), 26)
+my_colors <- my_colors[as.numeric(class_of_canton)] # attribue une couleur à chaque canton
+
+# Afficher la carte
+par(mar=c(0,0,0,0))
+plot(communesCH$geometry, col=my_colors ,  bg = "#f2f2f2", lwd=0.1, border="#FFFFFF")
+plot(lacs$geometry, col="lightblue", bg="#f2f2f2", lwd=0.1, border= F, add = T)
+```
+
+### Séparer des jeux de données
+
+Il est possible de ne sélectionner qu'une seule partie d'un jeu de données. Il est par exemple possible de ne sélectionner qu'un seul canton parmi tous les cantons suisses.
+
+La commande ```subset```permet de ne sélectionner qu'une seule partie des données, ici pour les cantons suisses, grâce à une requête logique.
+
+```{R}
+jura <- subset(communesVotation, communesVotation$KANTONSNUM =="26")
+vaud <- subset(communesVotation, communesVotation$Canton =="Vaud")
+```
+
+Il est alors possible de n'afficher qu'un seul canton comme le montre la carte (simplifiée) ci-dessous :
+
+```{R}
+plot(jura$geometry)
+```
+
+
+La carte suivante représente la population des communes vaudoises, divisée en trois classes : 0 à 5'000 habitants, 5'001 à 10'000 habitants, 10'001 à 1'000'000 habitants.
+
+```{R}
+my_colors2 <- brewer.pal(3, "YlOrRd") # choix d'une palette de couleur
+
+# Création de classes de population
+class_of_pop <- cut(as.numeric(vaud$population), 3)
+class_of_pop <- cut(vaud$population, breaks = c(1000000, 10000, 5000, 0))
+
+my_colors2 <- my_colors2[as.numeric(class_of_pop)]
+
+par(mar=c(0,0,0,0))
+plot(vaud$geometry, col=my_colors2 ,  bg = "#f2f2f2", lwd=0.5, border="#FFFFFF")
+```
+
+## GGplot
+
+```GGplot2```est une librairie de visualisation de données. Elle est utilisée pour la création des graphiques "_declarative_". Elle est développée selon les principes développés par Leland Wilkinson dans son ouvrage "_The Grammar of Graphics2_".
+
+### Viridis
+Le package [Viridis](https://cran.r-project.org/web/packages/viridis/vignettes/intro-to-viridis.html) contient des échaelles de couleurs pour rendre les graphiques et cartes plus jolis, plus facile à lire pour les daltoniens. Il est aussi possible de trouver des échelles de couleurs qui s'adaptent bien à l'écran où qui sont adaptés aux impressions.
+
+```{R}
+library("ggplot2")
+library("ggsn") # complément à ggplot pour l'échelle et la flèche du nord
+library("viridis")
+
+ggplot() +
+  geom_sf(data = communesVotation, aes(fill = OuiPourcent), size=0, alpha=0.9) +
+  geom_sf(data = lacs, fill = "#cecece", size=0, alpha=0.9) +
+  theme_void() +
+  scale_fill_viridis(
+    breaks = c(20,40,50,60,80),
+    name = "Oui (%)",
+    guide = guide_legend( keyheight = unit(4, units = "mm"), keywidth=unit(10, units = "mm"), label.position = "right", title.position = 'top', nrow=5, reverse=TRUE) ) +
+  labs(
+    title = "Initiative sur les multinationales responsables",
+    subtitle = "Pourcentage de oui",
+    caption = "Données : CH, OFS, 2020 | Auteur : Romain Loup"
+  ) +
+  theme(
+    text = element_text(color = "#22211d"),
+    plot.background = element_rect(fill = "#f5f5f2", color = NA),
+    panel.background = element_rect(fill = "#f5f5f2", color = NA),
+    legend.background = element_rect(fill = "#f5f5f2", color = NA),
+    
+    plot.title = element_text(size=16, hjust=0.01, color = "#4e4d47", margin = margin(b = -0.1, t = 0.4, l = 2, unit = "cm")),
+    plot.subtitle = element_text(size=14, hjust=0.01, color = "#4e4d47", margin = margin(b = -0.1, t = 0.43, l = 2, unit = "cm")),
+    plot.caption = element_text(size=9, color = "#4e4d47", margin = margin(b = 0.1, unit = "cm") ),
+    
+    legend.position = c(0.9, 0.8)
+  ) +
+  scalebar(communesVotation, dist = 30, dist_unit = "km", st.size=3, transform = TRUE, model = "WGS84", border.size = 0.5, height = 0.01, box.fill = c("#4e4d47", "#f5f5f2"), st.color = "#4e4d47", box.color = "#4e4d47")
+
+```
+
+* ```geom_sf``` : Affiche des géométrie de type *simple features*. Cette commande peut afficher des points, lignes ou polygônes. -> [description](https://ggplot2.tidyverse.org/reference/ggsf.html)
+  + ```aes``` : Coordonnées X, Y -> [description](https://rdrr.io/cran/ggplot2/man/aes.html)
+* ```theme_void()``` : Thème vide. -> [description](https://ggplot2.tidyverse.org/reference/ggtheme.html)
+* ```scale_fill_viridis``` : Thème de couleurs. -> [description](https://cran.r-project.org/web/packages/viridis/vignettes/intro-to-viridis.html)
+* ```scalebar``` : Permet d'ajouter une échelle et une flèche du nord. Fonctionne avec le complément ```ggsn``` à ```ggplot``` -> [description](https://www.rdocumentation.org/packages/ggsn/versions/0.5.0/topics/scalebar)
+
+
+### Elements (obligatoires) à afficher sur une carte thématique
+
+- Titre et sous-titre
+- Légende
+- Echelle (flèche du nord obligatoire uniquement si la carte n'est pas orientée au nord)
+- Source des données
+- Auteur
+- Date (année au moins)
+
+A noter que pour la lisibilité d'une carte *thématique* (et non pour une carte *topographique*), une bonne pratique est de ne *pas* représenter les lacs en bleu afin de concenter l'attention des lecteurs sur l'information principale qui est ici une représentation d'une votation fédérale.
+
+#### Deuxième exemple
+```{R}
+# Carte n°2
+ggplot() +
+  geom_sf(data = communesVotation, aes(fill = OuiPourcent), size=0, alpha=0.9) +
+  geom_sf(data = lacs, fill = "#CECECE", size=0, alpha=0.9) +
+  theme_void() +
+  scale_colour_gradient2(
+    low = "#d7191c",
+    mid = "#ffffbf",
+    high = "#2c7bb6",
+    midpoint = 50,
+    space = "Lab",
+    na.value = "grey80",
+    guide = guide_legend( keyheight = unit(4, units = "mm"), keywidth=unit(10, units = "mm"), label.position = "right", title.position = 'top', reverse=TRUE),
+    aesthetics = "fill",
+    name = "Oui (%)"
+  ) +
+  labs(
+    title = "Initiative sur les multinationales responsables",
+    subtitle = "Pourcentage de oui",
+    caption = "Données : CH | Auteur : Romain Loup"
+  ) +
+  theme(
+    text = element_text(color = "#22211d"),
+    plot.background = element_rect(fill = "#f5f5f2", color = NA),
+    panel.background = element_rect(fill = "#f5f5f2", color = NA),
+    legend.background = element_rect(fill = "#f5f5f2", color = NA),
+    
+    plot.title = element_text(size= 14, hjust=0.01, color = "#4e4d47", margin = margin(b = -0.1, t = 0.4, l = 2, unit = "cm")),
+    plot.subtitle = element_text(size= 12, hjust=0.01, color = "#4e4d47", margin = margin(b = -0.1, t = 0.43, l = 2, unit = "cm")),
+    plot.caption = element_text(size=9, color = "#4e4d47", margin = margin(b = 0.1, unit = "cm") ),
+    legend.position = c(0.9, 0.8)
+  ) +
+  scalebar(communesVotation, dist = 30, dist_unit = "km", st.size=3, transform = TRUE, model = "WGS84", border.size = 0.5, height = 0.01, box.fill = c("#4e4d47", "#f5f5f2"), st.color = "#4e4d47", box.color = "#4e4d47")
+```
+
+## Cartes dynamiques
+
+Après les cartes statiques, il est possible de concevoir des cartes dynamiques et interactives. Le processus est un peu différent et ce type de carte ne peut pas être imprimé. Les données peuvent être importées directement depuis des projets personnels ou par des fournisseurs de données (*open-source*)
+
+### Leaflet
+
+Leaflet est une librairie JavaScript *open-source* très populaire qui permet de créer des cartes interactives.
+
+Ce procédé permet d'avoir un fond de carte OpenStreetMap et d'y afficher des informations souhaitées, comme par exemple des marqueurs, des lignes ou des polygônes. Le choix de chaque primitive dépend de l'échelle
+
+Exemples de primitives :
+
+* Point (marqueur) : restaurants sur la ville de Lausanne, villes sur la carte du monde, toilettes sur le plan de l'Anthropole, etc
+* Ligne : routes sur la carte de la Suisse, rivières sur la carte du canton de Vaud, routes maritimes sur la carte du monde, etc
+* Polygône : bâtiments sur le plan du campus de l'Unil, ville de Lausanne sur une carte du canton de Vaud, pays sur une carte du monde, etc
+
+#### Débuter avec Leaflet
+
+1. Ouvrir le package Leaflet
+2. Créer une carte avec la commande ```leaflet()```
+3. Ajouter les tuiles (la carte s'affiche par [tuile](https://en.wikipedia.org/wiki/Tiled_web_map))
+4. [Ajouter le marqueur](http://rstudio.github.io/leaflet/markers.html), en précisant la longitude et la latitude, puis ajouter un *popup* avec un texte souhaité, ici "Anthropole". Il est par ailleurs possible d'y ajouter des images ou des liens par exemple.
+
+```{R}
+library("leaflet")
+myMap <- leaflet()
+myMap <- addTiles(myMap) # Ajoute les tuiles OpenStreetMap par défaut
+myMap <- addMarkers(myMap, lng=6.584349, lat=46.523704, popup="Anthropole")
+myMap <- addMarkers(myMap, lng=6.579111, lat=46.526750, popup="Géopolis")
+myMap # Affiche la carte
+```
+
+Possible d'afficher aussi avec les pipes du package ```magrittr``` pour éviter la répétition de texte
+
+```{R eval=FALSE}
+library("magrittr")
+myMap <- leaflet() %>%
+  addTiles() %>%  # Ajoute les tuiles OpenStreetMap par défaut
+  addMarkers(lng=6.584349, lat=46.523704, popup="Anthropole") %>%
+  addMarkers(myMap, lng=6.579111, lat=46.526750, popup="Géopolis")
+```
+
+### Overpass Turbo
+
+[Overpass Turbo](https://wiki.openstreetmap.org/wiki/Overpass_turbo) est une [API](https://www.redhat.com/fr/topics/api/what-are-application-programming-interfaces) qui permet d'utiliser des attributs (points, lignes, ppolygônes) issus d'OpenStreetMap. Les données sont entrées par les utilisateurs, il est donc possible qu'elles ne soient pas parfaites.
+
+Des exemples sont disponibles sur [Cran osmdata](https://cran.r-project.org/web/packages/osmdata/vignettes/osmdata.html)
+
+Cet exemple montre comment obtenir une carte interactive des musées qui sont dans le canton en Vaud (polygône convexe). Un deuxième exemple est montré par la suite avec les musées du grand Londres.
+
+```{R}
+# Obtenir une matrice des musées du canton de Vaud
+library("sf")
+library("osmdata")
+
+get_museum <- getbb("Vaud") %>%
+  opq () %>%
+  add_osm_feature("tourism", "museum")
+
+get_museumLondon <- getbb("London") %>%
+  opq () %>%
+  add_osm_feature("tourism", "museum")
+
+museumP <- osmdata_sf(get_museum)$osm_points
+museumPL <- osmdata_sf(get_museumLondon)$osm_points
+
+coordMuseumName <- museumP [which (museumP$name != 'is.na'),] # supprimer les "erreurs", ici les musées qui n'auraient pas de nom
+coordMuseumNameL <- museumPL [which (museumPL$name != 'is.na'),]
+coordMuseum <- cbind(st_coordinates(coordMuseumName), coordMuseumName$name)
+coordMuseumL <- cbind(st_coordinates(coordMuseumNameL), coordMuseumNameL$name)
+colnames(coordMuseum)[1] <- "lng"
+colnames(coordMuseum)[2] <- "lat"
+colnames(coordMuseum)[3] <- "nom"
+colnames(coordMuseumL)[1] <- "lng"
+colnames(coordMuseumL)[2] <- "lat"
+colnames(coordMuseumL)[3] <- "nom"
+
+coordMuseumDat <- as.data.frame(coordMuseum)
+coordMuseumDatL <- as.data.frame(coordMuseumL)
+head(coordMuseumDat)
+
+myMap <- leaflet() %>% addTiles() %>% addMarkers(as.numeric(coordMuseumDat$lng),
+                                                 as.numeric(coordMuseumDat$lat),
+                                                 popup=coordMuseumDat$nom
+)
+myMap
+```
+
+* ```getbb``` : obtenir la *bounding box* (l'enveloppe) de la zone étudiées, possible aussi de mettre des coordonées, par exemple pour Londres : ```bbox = c(51.1, 0.1, 51.2, 0.2)```
+* ```opq``` : *bounding box* qui contient la zone
+* ```add_osm_feature``` : ajoute les différents *features* à la carte. La liste des différentes possibilité est disponible [ici](https://wiki.openstreetmap.org/wiki/Map_features#Aerialway)
+
+
+Le même type de carte sur Londres, avec un clustering des markers ```clusterOptions = markerClusterOptions()``` et un [autre fond de carte](https://rstudio.github.io/leaflet/basemaps.html)
+
+```{R}
+myMapCluster <- leaflet() %>%
+  addProviderTiles(providers$CartoDB.Positron) %>%
+  addMarkers(as.numeric(coordMuseumDatL$lng), as.numeric(coordMuseumDatL$lat),
+             popup=coordMuseumDatL$nom,clusterOptions = markerClusterOptions())
+myMapCluster
+```
+
+## Carte interactive polygônes
+
+Il est possible d'utiliser ses propres données pour faire des cartes interactives. L'exemple de la votation populaire est alors repris.
+
+Leaflet n'accepte pas de *shapefiles* contenant une dimension Z (altitude). Il faut donc la supprimer
+
+```{R}
+# Supprimer la dimension Z afin de projeter sur sur une carte Leaflet 2D
+communesVotation2D <- st_zm(communesVotation, drop = T, what = "ZM")
+head(communesVotation2D$geometry)
+head(communesVotation$geometry)
+
+mypalette <- colorNumeric( palette="viridis", domain=communesVotation2D$OuiPourcent, na.color="transparent")
+mypalette(c(45,43))
+
+m <- leaflet(communesVotation2D) %>%
+  addProviderTiles(providers$CartoDB.Positron) %>%
+  addTiles() %>%
+  setView( lat=46.801111, lng=8.226667 , zoom=7) %>%
+  addPolygons( fillColor = ~mypalette(communesVotation2D$OuiPourcent),
+               weight = 0,
+               highlightOptions = highlightOptions(color = "white", weight = 0,
+                                                   bringToFront = TRUE) )
+m
+```
+
+La première carte n'est pas assez lisible. Pour la suite, elle sera centrée sur le canton de Vaud, le fond de carte sera plus neutre, une échelle sera ajoutée ainsi que de l'interactivité quand la souris passe sur les éléments (```highlight```).
+
+```{R}
+# Nom du label
+labels <- paste0(communesVotation2D$NAME,"\n",round(communesVotation2D$OuiPourcent*100)/100, " %", collapse = NULL)
+pal <- colorNumeric("viridis", NULL) # fonction de palette de couleurs (divergente)
+
+m2 <- leaflet(communesVotation2D) %>%
+  addProviderTiles(providers$CartoDB.Positron) %>%
+  #addTiles()  %>%
+  setView( lat=46.637785, lng=7.2 , zoom=9) %>%
+  addPolygons(
+    fillColor = ~pal(OuiPourcent),
+    weight = 0.3,
+    opacity = 1,
+    color = "white",
+    #dashArray = "3",
+    fillOpacity = 0.7,
+    highlight = highlightOptions(
+      weight = 2,
+      color = "#666",
+      #dashArray = "",
+      fillOpacity = 0.7,
+      bringToFront = TRUE),
+    label = labels,
+    labelOptions = labelOptions(
+      style = list("font-weight" = "normal", padding = "3px 8px"),
+      textsize = "15px",
+      direction = "auto")
+  ) %>%
+  addLegend(pal = pal, values = ~OuiPourcent, opacity = 0.7, title = NULL,
+                 position = "bottomright")
+m2
+```
